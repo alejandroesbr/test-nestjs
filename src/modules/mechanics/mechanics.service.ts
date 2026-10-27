@@ -16,27 +16,20 @@ export class MechanicsService {
     private readonly mechanicRepository: Repository<MechanicEntity>,
   ) {}
 
-  async create(createMechanicDto: CreateMechanicDto): Promise<MechanicEntity> {
-    const existing = await this.mechanicRepository.findOneBy({
-      email: createMechanicDto.email,
-    });
-
-    if (existing) {
-      throw new ConflictException('Mechanic email is already registered');
-    }
-
-    const mechanic = this.mechanicRepository.create({
-      name: createMechanicDto.name,
-      email: createMechanicDto.email,
-      specialty: createMechanicDto.specialty,
-      status: createMechanicDto.status ?? true,
-      userId: createMechanicDto.userId ?? null,
-    });
-
-    return this.mechanicRepository.save(mechanic);
+  async create(dto: CreateMechanicDto): Promise<MechanicEntity> {
+    await this.ensureUniqueEmail(dto.email);
+    return this.mechanicRepository.save(
+      this.mechanicRepository.create({
+        name: dto.name,
+        email: dto.email,
+        specialty: dto.specialty,
+        status: dto.status ?? true,
+        userId: dto.userId ?? null,
+      }),
+    );
   }
 
-  async findAll(): Promise<MechanicEntity[]> {
+  findAll(): Promise<MechanicEntity[]> {
     return this.mechanicRepository.find();
   }
 
@@ -48,22 +41,12 @@ export class MechanicsService {
     return mechanic;
   }
 
-  async update(
-    id: number,
-    updateMechanicDto: UpdateMechanicDto,
-  ): Promise<MechanicEntity> {
+  async update(id: number, dto: UpdateMechanicDto): Promise<MechanicEntity> {
     const mechanic = await this.findOne(id);
-
-    if (updateMechanicDto.email && updateMechanicDto.email !== mechanic.email) {
-      const existingEmail = await this.mechanicRepository.findOneBy({
-        email: updateMechanicDto.email,
-      });
-      if (existingEmail) {
-        throw new ConflictException('Mechanic email is already registered');
-      }
+    if (dto.email && dto.email !== mechanic.email) {
+      await this.ensureUniqueEmail(dto.email);
     }
-
-    Object.assign(mechanic, updateMechanicDto);
+    Object.assign(mechanic, dto);
     return this.mechanicRepository.save(mechanic);
   }
 
@@ -71,5 +54,12 @@ export class MechanicsService {
     const mechanic = await this.findOne(id);
     mechanic.status = status !== undefined ? status : !mechanic.status;
     return this.mechanicRepository.save(mechanic);
+  }
+
+  private async ensureUniqueEmail(email: string): Promise<void> {
+    const existing = await this.mechanicRepository.findOneBy({ email });
+    if (existing) {
+      throw new ConflictException('Mechanic email is already registered');
+    }
   }
 }

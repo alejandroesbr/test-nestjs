@@ -18,6 +18,11 @@ interface PostgresError {
   };
 }
 
+/**
+ * Filtro global de excepciones que intercepta tanto HttpExceptions de NestJS
+ * como errores nativos de PostgreSQL (23505, 23503, 23514, 22P02),
+ * garantizando que ningún conflicto de negocio o restricción SQL genere un HTTP 500.
+ */
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
@@ -47,6 +52,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         }
       }
     } else if (typeof exception === 'object' && exception !== null) {
+      // Traducción de códigos de error SQLSTATE de PostgreSQL a códigos HTTP semánticos
       const pgErr = exception as PostgresError;
       const pgCode = pgErr.code ?? pgErr.driverError?.code;
       const pgDetail =

@@ -15,6 +15,10 @@ export interface StandardResponse<T> {
   timestamp: string;
 }
 
+/**
+ * Interceptor global que envuelve todas las respuestas HTTP exitosas (2xx)
+ * en un contrato estándar { success, statusCode, data, timestamp }.
+ */
 @Injectable()
 export class ResponseTransformInterceptor<T>
   implements NestInterceptor<T, StandardResponse<T>>
@@ -26,6 +30,7 @@ export class ResponseTransformInterceptor<T>
     const httpContext = context.switchToHttp();
     const response = httpContext.getResponse<Response>();
 
+    // Transforma el flujo reactivo RxJS devuelto por el controlador antes de serializar el JSON
     return next.handle().pipe(
       map((data) => ({
         success: true,

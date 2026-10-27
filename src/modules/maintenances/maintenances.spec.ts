@@ -156,9 +156,36 @@ describe('Phase 5: Maintenances Core Domain (FSM, Overlap, Mileage, External API
       );
 
       maintenanceRepo.findOne.mockResolvedValueOnce(null);
-      const created = await service.create(validDto);
-      expect(created.status).toBe(MaintenanceStatus.SCHEDULED);
-      expect(created.vehicleId).toBe(10);
+      maintenanceRepo.find.mockResolvedValueOnce([
+        {
+          id: 98,
+          mechanicId: 20,
+          scheduledDate: new Date('2026-11-01T07:30:00.000Z'),
+          status: MaintenanceStatus.SCHEDULED,
+        },
+      ]);
+      await expect(
+        service.create({
+          ...validDto,
+          scheduledDate: '2026-11-01T08:00:00.000Z',
+        }),
+      ).rejects.toThrow(ConflictException);
+
+      maintenanceRepo.findOne.mockResolvedValueOnce(null);
+      maintenanceRepo.find.mockResolvedValueOnce([
+        {
+          id: 98,
+          mechanicId: 20,
+          scheduledDate: new Date('2026-11-01T07:30:00.000Z'),
+          status: MaintenanceStatus.SCHEDULED,
+        },
+      ]);
+      const createdAtNine = await service.create({
+        ...validDto,
+        scheduledDate: '2026-11-01T09:00:00.000Z',
+      });
+      expect(createdAtNine.status).toBe(MaintenanceStatus.SCHEDULED);
+      expect(createdAtNine.vehicleId).toBe(10);
     });
   });
 
