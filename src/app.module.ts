@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
+import { RolesGuard } from './common/guards/roles.guard.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { VehiclesModule } from './modules/vehicles/vehicles.module.js';
 import { MechanicsModule } from './modules/mechanics/mechanics.module.js';
@@ -22,7 +25,7 @@ import { MaintenancesModule } from './modules/maintenances/maintenances.module.j
         password: configService.get<string>('DB_PASSWORD', 'postgres'),
         database: configService.get<string>('DB_NAME', 'fleetcore'),
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize: false,
       }),
     }),
     AuthModule,
@@ -32,6 +35,15 @@ import { MaintenancesModule } from './modules/maintenances/maintenances.module.j
     MaintenancesModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+  ],
 })
 export class AppModule {}
