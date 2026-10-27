@@ -13,7 +13,6 @@ import {
   ApiBearerAuth,
   ApiOperation,
   ApiQuery,
-  ApiResponse,
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
@@ -35,13 +34,8 @@ export class MaintenancesController {
   @ApiBearerAuth()
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Schedule a new maintenance order' })
-  @ApiResponse({ status: 201, description: 'Maintenance order created' })
-  @ApiResponse({
-    status: 409,
-    description: 'Vehicle unavailable or mechanic schedule conflict',
-  })
-  create(@Body() createMaintenanceDto: CreateMaintenanceDto) {
-    return this.maintenancesService.create(createMaintenanceDto);
+  create(@Body() dto: CreateMaintenanceDto) {
+    return this.maintenancesService.create(dto);
   }
 
   @Get()
@@ -51,6 +45,14 @@ export class MaintenancesController {
   @ApiOperation({ summary: 'List all maintenance orders with optional status filter' })
   findAll(@Query('status') status?: MaintenanceStatus) {
     return this.maintenancesService.findAll(status);
+  }
+
+  @Get('active')
+  @ApiBearerAuth()
+  @Roles(Role.ADMIN, Role.TECHNICIAN)
+  @ApiOperation({ summary: 'List active maintenance orders (SCHEDULED and IN_PROGRESS)' })
+  findActive() {
+    return this.maintenancesService.findActive();
   }
 
   @Get('vehicle/:vehicleId')
@@ -72,39 +74,19 @@ export class MaintenancesController {
   @Patch(':id/status')
   @ApiBearerAuth()
   @Roles(Role.ADMIN, Role.TECHNICIAN)
-  @ApiOperation({
-    summary:
-      'Transition maintenance order status (IN_PROGRESS, CANCELLED, COMPLETED)',
-  })
-  @ApiResponse({ status: 200, description: 'Maintenance status updated' })
-  @ApiResponse({
-    status: 400,
-    description: 'Missing closing fields or invalid mileage progression',
-  })
-  @ApiResponse({
-    status: 409,
-    description: 'Invalid state transition',
-  })
+  @ApiOperation({ summary: 'Transition maintenance status (IN_PROGRESS, CANCELLED, COMPLETED)' })
   updateStatus(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateStatusDto: UpdateMaintenanceStatusDto,
+    @Body() dto: UpdateMaintenanceStatusDto,
   ) {
-    return this.maintenancesService.updateStatus(id, updateStatusDto);
+    return this.maintenancesService.updateStatus(id, dto);
   }
 
   @Public()
   @UseGuards(ApiKeyGuard)
   @ApiSecurity('x-api-key')
   @Get('external/history/:plate')
-  @ApiOperation({
-    summary: 'External M2M endpoint: query vehicle maintenance history by plate via x-api-key',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Vehicle details and maintenance history',
-  })
-  @ApiResponse({ status: 401, description: 'Missing or invalid x-api-key' })
-  @ApiResponse({ status: 404, description: 'Vehicle plate not found' })
+  @ApiOperation({ summary: 'External M2M endpoint: query vehicle history by plate via x-api-key' })
   getVehicleExternalHistory(@Param('plate') plate: string) {
     return this.maintenancesService.getVehicleExternalHistory(plate);
   }

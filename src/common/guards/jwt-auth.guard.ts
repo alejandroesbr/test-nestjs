@@ -4,6 +4,11 @@ import { AuthGuard } from '@nestjs/passport';
 import { Observable } from 'rxjs';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator.js';
 
+/**
+ * Guardia global de autenticación JWT (Security by Default).
+ * Verifica primero si el endpoint o controlador tiene el metadato @Public();
+ * de lo contrario, delega la verificación criptográfica del Bearer token a Passport.
+ */
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
   constructor(private readonly reflector: Reflector) {

@@ -7,6 +7,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 
+/**
+ * Guardia específico para integraciones externas máquina a máquina (M2M).
+ * Valida la cabecera HTTP x-api-key contra la lista blanca configurada en la variable de entorno API_KEYS.
+ */
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
   constructor(private readonly configService: ConfigService) {}

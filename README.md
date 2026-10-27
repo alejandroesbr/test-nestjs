@@ -1,7 +1,7 @@
 # FleetCore API — Sistema de Gestión de Flotas y Mantenimientos
 
 - **Coder:** Alejandro
-- **Clan:** Riwi
+- **Clan:** NodeJS - AM
 - **Proyecto:** FleetCore REST API (NestJS + TypeScript + TypeORM + PostgreSQL)
 
 ---

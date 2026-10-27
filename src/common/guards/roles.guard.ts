@@ -10,6 +10,11 @@ import { Role } from '../constants/roles.enum.js';
 import { AuthenticatedUser } from '../decorators/current-user.decorator.js';
 import { ROLES_KEY } from '../decorators/roles.decorator.js';
 
+/**
+ * Guardia global de autorización basada en roles (RBAC).
+ * Se ejecuta después de JwtAuthGuard y compara el rol del usuario autenticado (request.user)
+ * contra los roles declarados mediante el decorador @Roles().
+ */
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
