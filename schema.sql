@@ -3,9 +3,6 @@
 -- Orden topológico, idempotente, integridad referencial e invariantes de dominio
 -- =============================================================================
 
--- Extensión para generación de UUIDs
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- =============================================================================
 -- 1. Tipos de datos personalizados (Enums)
 -- =============================================================================
@@ -17,6 +14,10 @@ BEGIN
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vehicle_status_enum') THEN
     CREATE TYPE vehicle_status_enum AS ENUM ('AVAILABLE', 'IN_MAINTENANCE', 'INACTIVE');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'maintenance_type_enum') THEN
+    CREATE TYPE maintenance_type_enum AS ENUM ('PREVENTIVE', 'CORRECTIVE');
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'maintenance_status_enum') THEN
@@ -31,40 +32,34 @@ $$;
 
 -- Tabla: users
 CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  full_name VARCHAR(150) NOT NULL,
+  id SERIAL PRIMARY KEY,
   email VARCHAR(150) NOT NULL,
   password VARCHAR(255) NOT NULL,
   role user_role_enum NOT NULL DEFAULT 'TECHNICIAN',
-  is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  deleted_at TIMESTAMPTZ NULL,
   CONSTRAINT uq_users_email UNIQUE (email)
 );
 
 -- Tabla: workshops
 CREATE TABLE IF NOT EXISTS workshops (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id SERIAL PRIMARY KEY,
   name VARCHAR(150) NOT NULL,
   address VARCHAR(255) NOT NULL,
-  phone VARCHAR(50) NULL,
-  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  status BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  deleted_at TIMESTAMPTZ NULL
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Tabla: vehicles
 CREATE TABLE IF NOT EXISTS vehicles (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id SERIAL PRIMARY KEY,
   plate VARCHAR(20) NOT NULL,
   brand VARCHAR(100) NOT NULL,
   model VARCHAR(100) NOT NULL,
   year INTEGER NOT NULL,
   mileage INTEGER NOT NULL DEFAULT 0,
   status vehicle_status_enum NOT NULL DEFAULT 'AVAILABLE',
-  is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   deleted_at TIMESTAMPTZ NULL,
@@ -77,20 +72,18 @@ CREATE TABLE IF NOT EXISTS vehicles (
 -- 3. Entidades dependientes (Nivel 1)
 -- =============================================================================
 
--- Tabla: mechanics (puede vincularse opcionalmente o directamente a un usuario)
+-- Tabla: mechanics
 CREATE TABLE IF NOT EXISTS mechanics (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NULL,
-  full_name VARCHAR(150) NOT NULL,
-  email VARCHAR(150) NULL,
-  phone VARCHAR(50) NULL,
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(150) NOT NULL,
+  email VARCHAR(150) NOT NULL,
   specialty VARCHAR(120) NOT NULL,
-  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  status BOOLEAN NOT NULL DEFAULT TRUE,
+  user_id INTEGER NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  deleted_at TIMESTAMPTZ NULL,
-  CONSTRAINT uq_mechanics_user_id UNIQUE (user_id),
   CONSTRAINT uq_mechanics_email UNIQUE (email),
+  CONSTRAINT uq_mechanics_user_id UNIQUE (user_id),
   CONSTRAINT fk_mechanics_user
     FOREIGN KEY (user_id) REFERENCES users (id)
     ON DELETE RESTRICT
@@ -103,22 +96,21 @@ CREATE TABLE IF NOT EXISTS mechanics (
 
 -- Tabla: maintenances (Aggregate Root)
 CREATE TABLE IF NOT EXISTS maintenances (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  vehicle_id UUID NOT NULL,
-  mechanic_id UUID NOT NULL,
-  workshop_id UUID NOT NULL,
+  id SERIAL PRIMARY KEY,
+  vehicle_id INTEGER NOT NULL,
+  mechanic_id INTEGER NOT NULL,
+  workshop_id INTEGER NOT NULL,
+  type maintenance_type_enum NOT NULL DEFAULT 'PREVENTIVE',
   description TEXT NOT NULL,
+  mileage INTEGER NOT NULL,
+  scheduled_date TIMESTAMPTZ NOT NULL,
   status maintenance_status_enum NOT NULL DEFAULT 'SCHEDULED',
-  scheduled_start TIMESTAMPTZ NOT NULL,
-  scheduled_end TIMESTAMPTZ NOT NULL,
-  initial_mileage INTEGER NULL,
-  work_performed TEXT NULL,
+  work_done TEXT NULL,
   final_cost NUMERIC(12, 2) NULL,
+  finished_at TIMESTAMPTZ NULL,
   final_mileage INTEGER NULL,
-  completed_at TIMESTAMPTZ NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  deleted_at TIMESTAMPTZ NULL,
   CONSTRAINT fk_maintenances_vehicle
     FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
     ON DELETE RESTRICT
@@ -131,27 +123,20 @@ CREATE TABLE IF NOT EXISTS maintenances (
     FOREIGN KEY (workshop_id) REFERENCES workshops (id)
     ON DELETE RESTRICT
     ON UPDATE CASCADE,
-  CONSTRAINT chk_maintenances_scheduled_range
-    CHECK (scheduled_end > scheduled_start),
+  CONSTRAINT chk_maintenances_mileage_non_negative
+    CHECK (mileage >= 0),
   CONSTRAINT chk_maintenances_final_cost_non_negative
     CHECK (final_cost IS NULL OR final_cost >= 0),
-  CONSTRAINT chk_maintenances_initial_mileage_non_negative
-    CHECK (initial_mileage IS NULL OR initial_mileage >= 0),
   CONSTRAINT chk_maintenances_final_mileage_non_negative
     CHECK (final_mileage IS NULL OR final_mileage >= 0),
   CONSTRAINT chk_maintenances_mileage_progression
-    CHECK (
-      final_mileage IS NULL
-      OR initial_mileage IS NULL
-      OR final_mileage >= initial_mileage
-    )
+    CHECK (final_mileage IS NULL OR final_mileage >= mileage)
 );
 
 -- =============================================================================
 -- 5. Índices estratégicos e índices parciales
 -- =============================================================================
 
--- Índices sobre claves foráneas y búsquedas frecuentes
 CREATE INDEX IF NOT EXISTS idx_mechanics_user_id
   ON mechanics (user_id);
 
@@ -168,12 +153,9 @@ CREATE INDEX IF NOT EXISTS idx_maintenances_status
   ON maintenances (status);
 
 CREATE INDEX IF NOT EXISTS idx_maintenances_mechanic_schedule
-  ON maintenances (mechanic_id, scheduled_start, scheduled_end)
+  ON maintenances (mechanic_id, scheduled_date)
   WHERE status IN ('SCHEDULED', 'IN_PROGRESS');
 
--- Índice único parcial: garantiza que un vehículo solo tenga 1 mantenimiento activo
--- (SCHEDULED o IN_PROGRESS) a la vez, permitiendo múltiples históricos COMPLETED/CANCELLED
 CREATE UNIQUE INDEX IF NOT EXISTS uq_maintenances_active_vehicle
   ON maintenances (vehicle_id)
   WHERE status IN ('SCHEDULED', 'IN_PROGRESS');
-
