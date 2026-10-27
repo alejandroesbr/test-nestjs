@@ -1,0 +1,58 @@
+services:
+  # Servicio 1: Base de datos relacional
+  postgres:
+    image: postgres:15-alpine
+    container_name: fleetcore-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-fleetcore}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - fleetcore_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql # Carga el esquema inicial (Opción B)
+    networks:
+      - fleetcore-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-fleetcore}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Servicio 2: Backend NestJS
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fleetcore-api
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy # Espera hasta que Postgres esté 100% listo para recibir conexiones
+    environment:
+      PORT: 3000
+      DB_HOST: postgres # Usa el nombre del servicio dentro de la red Docker
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-fleetcore}
+      JWT_SECRET: ${JWT_SECRET:-cambia-este-secreto}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      API_KEYS: ${API_KEYS:-demo-key-partner-1,demo-key-partner-2}
+    ports:
+      - "${PORT:-3000}:3000"
+    networks:
+      - fleetcore-net
+
+# Volumen persistente para datos de PostgreSQL
+volumes:
+  fleetcore_data:
+
+# Red interna bridge para comunicación entre contenedores
+networks:
+  fleetcore-net:
+    driver: bridge
+
+
